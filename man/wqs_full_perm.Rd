@@ -12,7 +12,7 @@ wqs_full_perm(
   b_main = 1000,
   b_perm = 200,
   b1_pos = TRUE,
-  b1_constr = FALSE,
+  b_constr = FALSE,
   rs = FALSE,
   niter = 200,
   seed = NULL,
@@ -20,14 +20,16 @@ wqs_full_perm(
   plan_strategy = "multicore",
   stop_if_nonsig = FALSE,
   stop_thresh = 0.05,
+  nworkers = NULL,
   ...
 )
 }
 \arguments{
 \item{formula}{An object of class formula. The wqs term must be included in
-the formula (e.g., y ~ wqs + ...).}
+the formula (e.g., \code{y ~ wqs + ...}).}
 
-\item{data}{The \code{data.frame} to be used in the WQS regression run.}
+\item{data}{The \code{data.frame} to be used in the WQS regression run. This
+can be of class \code{data.frame} or it can be a tibble from the tidyverse.}
 
 \item{mix_name}{A vector with the mixture column names.}
 
@@ -38,13 +40,19 @@ variables.}
 
 \item{b_perm}{The number of bootstraps for the iterated permutation test
 WQS regression runs and the reference WQS regression run (only for linear
-WQS regression and only when b_mean != b_perm).}
+WQS regression and only when \code{b_mean != b_perm}).}
 
 \item{b1_pos}{A logical value that indicates whether beta values should be
 positive or negative.}
 
-\item{b1_constr}{Logical value that determines whether to apply positive or
-negative constraints in the optimization function for the weight optimization.}
+\item{b_constr}{Logical value that determines whether to apply positive or
+negative constraints in the optimization function for the weight optimization.
+Note that this won't guarantee that the iterated b1 values in the
+weight optimization are only positive (if \code{b1_pos = TRUE}) or only
+negative (if \code{b1_pos = FALSE}) as seen in the \code{bres} matrix output
+by the \code{gwqs} models (i.e., column \code{bres$b1}), but it does
+substantially increase the probability that those b1 values will be
+constrained to be either positive or negative. This defaults to \code{FALSE}.}
 
 \item{rs}{A logical value indicating whether random subset implementation
 should be performed.}
@@ -54,19 +62,23 @@ should be performed.}
 \item{seed}{An integer to fix the seed. This will only impact the the initial
 WQS regression run and not the permutation test iterations. The default
 setting is NULL, which means no seed is used for the initial WQS regression.
-The seed will be saved in the "gwqs_main" object as "gwqs_main$seed".}
+The seed will be saved in the \code{"gwqs_main"} object as
+\code{"gwqs_main$seed"}.}
 
 \item{family}{A description of the error distribution and link function to be
 used in the model. This can be a character string naming a family function
-(e.g., "binomial") or a family object (e.g., binomial(link="logit")).
-Currently validated families include gaussian(link="identity") for linear
-regression, binomial() with any accepted link function (e.g., "logit" or
-"probit"), poisson(link = "log"), quasipoisson(link = "log"), or "negbin" for
-negative binomial. The "multinomial" family is not yet supported.}
+(e.g., \code{"binomial"}) or a family object (e.g.,
+\code{binomial(link="logit")}). Currently validated families include
+\code{gaussian(link="identity")} for linear regression, \code{binomial()}
+with any accepted link function (e.g., \code{"logit"} or \code{"probit"}),
+\code{poisson(link = "log")}, \code{quasipoisson(link = "log")}, or
+\code{"negbin"} for negative binomial. The \code{"multinomial"} family is
+not yet supported.}
 
 \item{plan_strategy}{Evaluation strategy for the plan function. You can choose
-among "sequential", "transparent", "multisession", "multicore", "multiprocess",
-"cluster" and "remote." See future::plan documentation for full details.}
+among \code{"sequential"}, \code{"multisession"}, \code{"multicore"}, and
+\code{"cluster"}. This defaults to \code{"multicore"}. See the
+\code{future::plan} documentation for full details.}
 
 \item{stop_if_nonsig}{if TRUE, the function will not proceed with the
 permutation test if the main WQS regression run produces nonsignificant
@@ -75,23 +87,43 @@ p-value.}
 \item{stop_thresh}{numeric p-value threshold required in order to proceed
 with the permutation test, if \code{stop_if_nonsig = TRUE}.}
 
-\item{...}{Other parameters to put into the gwqs function call.}
+\item{nworkers}{(optional) If the \code{plan_strategy} is not
+\code{"sequential"}, this argument defines the number of parallel processes
+to use, which can be critical when using a high-performance computing (HPC)
+cluster. This should be an integer value. The default behavior for
+\code{gWQS::gwqs} is to use all detected cores on a machine, but for many
+HPC use scenarios, this would call in cores that have not been allotted by
+the HPC scheduler, resulting in the submitted job being halted. For example,
+if one has requested 14 cores on a 28-core HPC queue, one would want to set
+\code{nworkers = 14}. If \code{nworkers} was greater than 14 in that case,
+the HPC job would be terminated. This argument defaults to \code{NULL}, in
+which case \code{length(future::availableWorkers())} will be used to
+determine the number of parallel processes to use.}
+
+\item{...}{(optional) Additional arguments to pass to the \code{gWQS::gwqs}
+function.}
 }
 \value{
-\code{wqs_full_perm} returns an object of class \code{wqs_perm}, which
-contains three sublists:
+\code{wqs_full_perm} returns an object of class \code{wqs_perm},
+which contains three sublists:
 
-\item{perm_test}{List containing: (1) \code{pval}: permutation test p-value, (2) (linear
-regression only) \code{testbeta1}: reference WQS regression coefficient beta1 value, (3)
-(linear regression only) \code{betas}: Vector of beta values from each
-permutation test run, (4) (logistic regression only) \code{testpval}: test reference
-p-value, (5) (logistic regression only) \code{permpvals}: p-values from the null
-models.}
-\item{gwqs_main}{Main gWQS object (same as model input). This will now include an
-additional object "seed" that returns the seed used for this main WQS regression.}
+\item{perm_test}{List containing:
+\itemize{
+\item \code{pval}: permutation test p-value
+\item (linear regression only) \code{testbeta1}: reference WQS regression
+coefficient beta1 value
+\item (linear regression only) \code{betas}: Vector of beta values from
+each permutation test run
+\item (logistic regression only) \code{testpval}: test reference p-value
+\item (logistic regression only) \code{permpvals}: p-values from the null models
+}
+}
+\item{gwqs_main}{Main gWQS object (same as model input). This will now
+include an additional object "seed" that returns the seed used for this main
+WQS regression.}
 \item{gwqs_perm}{Permutation test reference gWQS object (NULL if model
-\code{family != "gaussian"} or if same number of bootstraps are used in permutation
-test WQS regression runs as in the main run).}
+\code{family != "gaussian"} or if same number of bootstraps are used in
+permutation test WQS regression runs as in the main run).}
 }
 \description{
 \code{wqs_full_perm} is a full wrapper function that is a full implementation
@@ -102,12 +134,17 @@ permutation test to determine the significance of the WQS coefficient.
 library(gWQS)
 
 # mixture names
-PCBs <- names(wqs_data)[1:17] #half of the original 34 for quick computation
+PCBs <- names(wqs_data)[1:5] 
+# Only using 1st 5 of the original 34 exposures for this quick example
+
+# quick example with only 3 bootstraps each WQS regression iteration, and 
+# only 2 iterations
 
 perm_test_res <- wqs_full_perm(formula = yLBX ~ wqs, data = wqs_data, 
-                                mix_name = PCBs, q = 10, b_main = 5, 
-                                b_perm = 5, b1_pos = TRUE, b1_constr = FALSE, 
-                                niter = 3, seed = 16, plan_strategy = "multicore", 
+                                mix_name = PCBs, q = 10, b_main = 3, 
+                                b_perm = 3, b1_pos = TRUE, b_constr = FALSE, 
+                                niter = 2, seed = 16, 
+                                plan_strategy = "multicore", 
                                 stop_if_nonsig = FALSE)
 
 # Note: The default values of b_main = 1000, b_perm = 200, and niter = 200 
